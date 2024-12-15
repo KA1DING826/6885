@@ -1,0 +1,107 @@
+library(quantmod)
+library(ggplot2)
+library(dplyr)
+
+getSymbols("AAPL", src = "yahoo", from = "2020-01-01", to = Sys.Date())
+## [1] "AAPL"
+
+aapl_data <- data.frame(Date = index(AAPL), coredata(AAPL))
+
+summary_table <- aapl_data %>%
+  summarize(
+     mean(AAPL.Open),
+    median(AAPL.Open),
+     mean(AAPL.Close),
+    median(AAPL.Close),
+    sd(AAPL.Open),
+     sd(AAPL.Close)
+  )
+
+
+
+aapl_data$Daily_Returns <- c(NA, diff(aapl_data$AAPL.Close) / aapl_data$AAPL.Close[-1])
+returns_table <- aapl_data %>%
+  select(Date, Daily_Returns) %>%
+  na.omit()
+
+ggplot(aapl_data, aes(x = Date, y = AAPL.Close)) +
+  geom_line(color = "blue") +
+  labs(title = "AAPL Closing Price Over Time", x = "Date",
+ y = "Closing Price (USD)") +
+  theme_minimal()
+
+
+ggplot(returns_table, aes(x = Date, y = Daily_Returns)) +
+  geom_line(color = "red") +
+  labs(title = "AAPL Daily Returns Over Time", x = "Date",
+ y = "Daily Returns") +
+  theme_minimal()
+
+
+ggplot(returns_table, aes(x = Daily_Returns)) +
+  geom_histogram(bins = 30, fill = "gray", color = "black") +
+  labs(title = "Histogram of AAPL Daily Returns", x = "Daily Returns",
+ y = "Frequency") +
+  theme_minimal()
+
+
+
+library(tidyquant)
+library(dplyr)
+library(ggplot2)
+
+aapl_data <- tq_get("AAPL", from = "2020-01-01", to = Sys.Date())
+
+q_learning_trader <- function(data, episodes, learning_rate, discount_factor) {
+  states <- nrow(data)
+  actions <- c("hold", "buy", "sell")
+    Q <- matrix(0, nrow = states, ncol = length(actions))
+  
+  for (episode in 1:episodes) {
+    total_profit <- 0  
+    current_state <- 1  
+    position <- 0  
+    
+    for (step in 1:(states - 1)) {
+  
+      if (runif(1) < 0.1) {
+        action <- sample(actions, 1)  
+      } else {
+        action <- actions[which.max(Q[current_state, ])] 
+      }
+      
+      if (action == "buy" && position == 0) {
+        position <- 1  
+        entry_price <- data$close[step]
+      } else if (action == "sell" && position == 1) {
+        position <- 0  
+        reward <- data$close[step] - entry_price  
+        total_profit <- total_profit + reward  
+      }
+      
+      if (position == 1) {
+        reward <- 0  
+      } else {
+        reward <- total_profit  
+      }
+      
+      Q[current_state, which(actions == action)] <- 
+        Q[current_state, which(actions == action)] + 
+        learning_rate * (reward + discount_factor * max(Q[step + 1, ]) - Q[current_state, which(actions == action)])
+      
+      current_state <- step  
+    }
+  }
+  
+  return(list(Q = Q, total_profit = total_profit))
+}
+
+
+set.seed(42)  
+result <- q_learning_trader(aapl_data, 
+episodes = 1000, 
+learning_rate = 0.1, 
+discount_factor = 0.9)
+
+print(paste("Total Profit from Trading: ", result$total_profit))
+## [1] "Total Profit from Trading:  63.76"
